@@ -1,0 +1,592 @@
+
+
+Un infarto de miocardio (IM), ocurre cuando el flujo de sangre hacia el corazón se ve interrumpido, causando daño al músculo cardíaco. Los síntomas más frecuentes incluyen dolor o molestia en el pecho que puede extenderse al hombro, brazo o mandíbula. Otros síntomas pueden incluir dificultad para respirar, náuseas y sudoración. Las complicaciones posibles de un IM incluyen insuficiencia cardíaca, arritmias y shock cardiogénico.
+En España, la incidencia muestra que para personas de 25 a 74 años oscila entre 135 y 210 casos por 100.000 personas-año en hombres y entre 29 y 61 casos por 100.000 en mujeres. Se trata de una patología relativamente frecuente y potencialmente mortal. 
+
+Las complicaciones del infarto de miocardio pueden tener un impacto significativo en la salud y la calidad de vida de los pacientes, así como en los costos de atención médica asociados. Desde insuficiencia cardíaca hasta arritmias cardiacas y shock cardiogénico, estas complicaciones pueden aumentar la morbimortalidad y prolongar la hospitalización, lo que resulta en una mayor carga tanto para los pacientes como para el sistema de salud en su conjunto.
+
+Además de su impacto clínico y económico, las complicaciones del infarto de miocardio también plantean desafíos en términos de gestión clínica y toma de decisiones. La identificación temprana y la prevención de estas complicaciones son fundamentales para mejorar los resultados clínicos y la supervivencia de los pacientes con infarto de miocardio.
+
+El reconocimiento de patrones y la extracción de datos en un contexto clínico, como con un IM, son cruciales para identificar y prevenir complicaciones potenciales. Se ha seleccionado un dataset recopilado entre 1992 y 1995 en Krasnoyarsk. Disponible tanto en kaggle como en UC Irvine Machine Learning Repository, DOI:10.25392/leicester.data.12045261.v3, este dataset acumula datos referentes a IM en el momento de la admisión del paciente como de dias posteriores, lo cual permite analizar la evolución y monitorizar las posibles complicaciones que puedan aparecer. 
+
+El objetivo propuesto es analizar cómo influye el estado del paciente con IM y sus valores de laboratorio en el momento de la admisión en urgencias y estancia hospitalaria en las potenciales complicaciones que pueuda sufrir durante la estancia en UCI.Esto aporta un gran valor dado que permitirá a los profesionales hacer un abordaje mucho mas personalizado y prevenir dichas complicaciones.
+
+Dados los datos de los que disponemos, estamos ante un problema de clasificación. Siendo las variables objetivo a analizar las posibles complicaciones, siendo clasificación binaria. Será necesario aplicar técnicas de aprendizaje supervisado.
+
+
+```{r}
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidymodels)
+library(recipes)
+library(arules)
+library(tidyr)
+library(stats)
+```
+
+# Carga de datos y descripción general
+
+```{r}
+heart <- read.csv("data/myocardial_infarctation.CSV", row.names=NULL)
+
+str(heart)
+head(heart)
+```
+Se visualizan los datos, el dataset está compuesto por 124 variables y 1700 observaciones. Las variables y otra información se pueden consultar en https://archive.ics.uci.edu/dataset/579/myocardial+infarction+complications. A continuación se detallan las variables del dataset a fin de hacer una selección.
+
++ **ID**: Identificador único (Numérica)
++ **AGE**: Edad del paciente (Numérica)
++ **SEX**: Género (Binaria; 0: femenino, 1: masculino)
+
+Antecedentes y factores de riesgo
+
++ **INF_ANAM**: Cantidad de infartos previos (0, 1, 2, 3 o mas)
++ **STENOK_AN**: Angina de pecho por esfuerzo previa ,categórica (0: nunca, 1: durante el último año, 2: hace un año, 3: hace dos años, 4: hace tres años, 5: hace 4-5 años)
++ **FK_STENOK**: Clase funcional de la angina en el último año (Ordinal) (0: sin angina 1: I FC 2: II FC 3: III FC 4: IV FC	)
++ **IBS_POST**: Enfermedad coronaria reciente (Ordinal) (0 ninguna, 1 angina de esfuerzo, 2 angina inestable)
++ **IBS_NASL**: Antecedentes familiares de enfermedad coronaria  (Binaria; 0: no, 1: sí)
++ **GB**: Presencia de hipertensión esencial (Ordinal) (0: no hay hipertensión, 1: Etapa 1, 2: Etapa 2, 3: Etapa 3)
++ **SIM_GIPERT**: Hipertensión sintomática (Binaria; 0: no, 1: sí)
++ **DLIT_AG**: Duración de la hipertensión arterial, por años (Ordinal) (0 sin HTA, 7 mas de 10 años)
++ **ZSN_A**: Insuficiencia cardíaca crónica en la anamnesis (Parcialmente ordenada) (0: no hay insuficiencia cardíaca crónica, 1: Etapa I, 2: Etapa II (insuficiencia cardíaca debido a disfunción sistólica del ventrículo derecho), 3: Etapa II (insuficiencia cardíaca debido a disfunción sistólica del ventrículo izquierdo), 4: Etapa IIB (insuficiencia cardíaca debido a disfunción sistólica de los ventrículos izquierdo y derecho))
++ **nr_11**: Observación de arritmias previas (Binaria; 0: no, 1: sí)
++ **nr_01**: Contracciones auriculares prematuras previas (Binaria; 0: no, 1: sí)
++ **nr_02**: Contracciones ventriculares prematuras previas (Binaria; 0: no, 1: sí)
++ **nr_03**: Paroxismos de fibrilación auricular previos (Binaria; 0: no, 1: sí)
++ **nr_04**: Fibrilación auricular persistente previa (Binaria; 0: no, 1: sí)
++ **nr_07**: Fibrilación ventricular previa (Binaria; 0: no, 1: sí)
++ **nr_08**: Taquicardia ventricular paroxística previa (Binaria; 0: no, 1: sí)
++ **np_01**: Bloqueo AV de primer grado previo (Binaria; 0: no, 1: sí)
++ **np_04**: Bloqueo AV de tercer grado previo (Binaria; 0: no, 1: sí)
++ **np_05**: BCRHA anterior (LBBB) previo (Binaria; 0: no, 1: sí)
++ **np_07**: BCRHA incompleto previo (Binaria; 0: no, 1: sí)
++ **np_08**: BCRHA completo previo (Binaria; 0: no, 1: sí)
++ **np_09**: BRDHA incompleto previo (Binaria; 0: no, 1: sí)
++ **np_10**: BRDHA completo previo (Binaria; 0: no, 1: sí)
++ **endocr_01**: Diabetes mellitus en la anamnesis (Binaria; 0: no, 1: sí)
++ **endocr_02**: Obesidad en la anamnesis (Binaria; 0: no, 1: sí)
++ **endocr_03**: Tirotóxicosis en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_01**: Bronquitis crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_02**: Bronquitis crónica obstructiva en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_03**: Asma bronquial en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_04**: Neumonía crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_06**: Tuberculosis pulmonar en la anamnesis (Binaria; 0: no, 1: sí)
++ **S_AD_KBRIG**: Presión arterial sistólica según el equipo de cardiología de emergencia (mmHg) (Numérica)
++ **D_AD_KBRIG**: Presión arterial diastólica según el equipo de cardiología de emergencia (mmHg) (Numérica)
+
+Datos del ingreso en unidad de cuidados intensivos (UCI)
+
++ **S_AD_ORIT**: Presión arterial sistólica según la unidad de cuidados intensivos (mmHg) (Numérica)
++ **D_AD_ORIT**: Presión arterial diastólica según la unidad de cuidados intensivos (mmHg) (Numérica)
++ **O_L_POST**: Edema pulmonar al momento de la admisión a la unidad de cuidados intensivos (Binaria; 0: no, 1: sí)
++ **K_SH_POST**: Choque cardiogénico al momento de la admisión a la unidad de cuidados intensivos (Binaria; 0: no, 1: sí)
++ **MP_TP_POST**: Paroxismos de fibrilación auricular al momento de la admisión a la unidad de cuidados intensivos, o en etapa prehospitalaria (Binaria; 0: no, 1: sí)
++ **SVT_POST**: Paroxismos de taquicardia supraventricular al momento de la admisión a la unidad de cuidados intensivos, o en etapa prehospitalaria (Binaria; 0: no, 1: sí)
++ **GT_POST**: Paroxismos de taquicardia ventricular al momento de la admisión a la unidad de cuidados intensivos, o en etapa prehospitalaria (Binaria; 0: no, 1: sí)
++ **FIB_G_POST**: Fibrilación ventricular al momento de la admisión a la unidad de cuidados intensivos, o en etapa prehospitalaria (Binaria; 0: no, 1: sí)
+
+Tipo de infarto
+
++ **ant_im**: Presencia de un infarto de miocardio anterior (ventricular izquierdo) (ECG cambia en derivaciones V1: V4) (Categórica) (0: no hay infarto en esta ubicación, 1: QRS sin cambios, 2: QRS como complejo QR, 3: QRS como complejo Qr, 4: QRS como complejo QS
++ **lat_im**: Presencia de un infarto de miocardio lateral (ventricular izquierdo) (ECG cambia en derivaciones V5: V6, I, AVL) (Categórica) (0: no hay infarto en esta ubicación, 1: QRS sin cambios, 2: QRS como complejo QR, 3: QRS como complejo Q, 4: QRS como complejo QS)
++ **inf_im**: Presencia de un infarto de miocardio inferior (ventricular izquierdo) (ECG cambia en derivaciones III, AVF, II) (Categórica) (0: no hay infarto en esta ubicación, 1: QRS sin cambios, 2: QRS como complejo QR, 3: QRS como complejo Q, 4: QRS como complejo QS)
++ **post_im**: Presencia de un infarto de miocardio posterior (ventricular izquierdo) (ECG cambia en V7: V9, cambios de reciprocidad en derivaciones V1 – V3) (Categórica) (0: no hay infarto en esta ubicación, 1: QRS sin cambios, 2: QRS como complejo QR, 3: QRS como complejo Q, 4: QRS como complejo QS)
++ **IM_PG_P**: Presencia de un infarto de miocardio ventricular derecho (Binaria; 0: no, 1: sí)
+
+Arritmias presentes en el electrocardiograma (ECG)
+
++ **ritm_ecg_p_01**: Ritmo ECG en el momento de la admisión al hospital: sinusal (con una frecuencia cardíaca de 60-90) (Binaria; 0: no, 1: sí)
++ **ritm_ecg_p_02**: Ritmo ECG en el momento de la admisión al hospital: fibrilación auricular (Binaria; 0: no, 1: sí)
++ **ritm_ecg_p_04**: Ritmo ECG en el momento de la admisión al hospital: auricular (Binaria; 0: no, 1: sí)
++ **ritm_ecg_p_06**: Ritmo ECG en el momento de la admisión al hospital: idioventricular (Binaria; 0: no, 1: sí)
++ **ritm_ecg_p_07**: Ritmo ECG en el momento de la admisión al hospital: sinusal con una frecuencia cardíaca superior a 90 (taquicardia) (Binaria; 0: no, 1: sí)
++ **vritm_ecg_p_08**: Ritmo ECG en el momento de la admisión al hospital: sinusal con una frecuencia cardíaca inferior a 60 (bradicardia) (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_01**: Contracciones auriculares prematuras en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_02**: Contracciones auriculares prematuras frecuentes en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_03**: Contracciones ventriculares prematuras en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_04**: Contracciones ventriculares prematuras frecuentes en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_05**: Paroxismos de fibrilación auricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_06**: Forma persistente de fibrilación auricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_08**: Paroxismos de taquicardia supraventricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_09**: Paroxismos de taquicardia ventricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_r_ecg_p_10**: Fibrilación ventricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_01**: Bloqueo sinoauricular en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_03**: Bloqueo AV de primer grado en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_04**: Bloqueo AV de segundo grado tipo 1 (Mobitz I/Wenckebach) en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_05**: Bloqueo AV de segundo grado tipo 2 (Mobitz II/Hay) en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_06**: Bloqueo AV de tercer grado en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_07**: BCRHA anterior en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_08**: BCRHA posterior en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_09**: BCRHA incompleto en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_10**: BCRHA completo en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_11**: BRDHA incompleto en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
++ **n_p_ecg_p_12**: BRDHA completo en ECG en el momento de la admisión al hospital (Binaria; 0: no, 1: sí)
+
+Tratamiento fibrinolisis
+
++ **fibr_ter_01**: Terapia fibrinolítica con Celiasum 750k IU (Binaria; 0: no, 1: sí)
++ **fibr_ter_02**: Terapia fibrinolítica con Celiasum 1m IU (Binaria; 0: no, 1: sí)
++ **fibr_ter_03**: Terapia fibrinolítica con Celiasum 3m IU (Binaria; 0: no, 1: sí)
++ **fibr_ter_05**: Terapia fibrinolítica con Streptase (Binaria; 0: no, 1: sí)
++ **fibr_ter_06**: Terapia fibrinolítica con Celiasum 500k IU (Binaria; 0: no, 1: sí)
++ **fibr_ter_07**: Terapia fibrinolítica con Celiasum 250k IU (Binaria; 0: no, 1: sí)
++ **fibr_ter_08**: Terapia fibrinolítica con Streptodecase 1.5m IU (Binaria; 0: no, 1: sí)
+
+Determinacioniies de laboratorio
+
++ **GIPO_K**: Hipokalemia (< 4 mmol/L) (Binaria; 0: no, 1: sí)
++ **K_BLOOD**: Contenido de potasio en suero (mmol/L) (Numérica)
++ **GIPER_Na**: Aumento de sodio en suero (más de 150 mmol/L) (Binaria; 0: no, 1: sí)
++ **NA_BLOOD**: Contenido de sodio en suero (mmol/L) (Numérica)
++ **ALT_BLOOD**: Contenido de AlAT en suero (IU/L) (Numérica)
++ **AST_BLOOD**: Contenido de AsAT en suero (IU/L) (Numérica)
++ **KFK_BLOOD**: Contenido de CPK en suero (IU/L) (Numérica)
++ **L_BLOOD**: Conteo de células blancas (billones por litro) (Numérica)
++ **ROE**: Velocidad de sedimentación eritrocítica (mm) (Numérica)
+
+Dolor y tiempos
+
++ **TIME_B_S**: Tiempo transcurrido desde el inicio del ataque de enfermedad coronaria hasta la hospitalización (Categórica) (1: menos de 2 horas, 2: 2-4 horas, 3: 4-6 horas, 4: 6-8 horas, 5: 8-12 horas, 6: 12-24 horas, 7: más de 1 día, 8: más de 2 días, 9: más de 3 días)
++ **R_AB_1_n**: Recurrencia del dolor en las primeras horas del período hospitalario (Categórica)  (0: no hay recaída, 1: solo una vez, 2: 2 veces, 3: 3 o más veces)
++ **R_AB_2_n**: Recurrencia del dolor en el segundo día del período hospitalario (Categórica)  (0: no hay recaída, 1: solo una vez, 2: 2 veces, 3: 3 o más veces)
++ **R_AB_3_n**: Recurrencia del dolor en el tercer día del período hospitalario (Categórica)  (0: no hay recaída, 1: solo una vez, 2: 2 veces, 3: 3 o más veces)
+
+Fármacos durante la hospitalización
+
++ **NA_KB**: Uso de opioides por el equipo de cardiología de emergencia (Binaria; 0: no, 1: sí)
++ **NOT_NA_KB**: Uso de AINEs por el equipo de cardiología de emergencia (Binaria; 0: no, 1: sí)
++ **LID_KB**: Uso de lidocaína por el equipo de cardiología de emergencia (Binaria; 0: no, 1: sí)
++ **NITR_S**: Uso de nitratos líquidos en la UCI (Binaria; 0: no, 1: sí)
++ **NA_R_1_n**: Uso de opioides en la UCI en las primeras horas del período hospitalario (Numérica)
++ **NA_R_2_n**: Uso de opioides en la UCI en el segundo día del período hospitalario (Numérica)
++ **NA_R_3_n**: Uso de opioides en la UCI en el tercer día del período hospitalario (Numérica)
++ **NOT_NA_1_n**: Uso de AINEs en la UCI en las primeras horas del período hospitalario (Categórica) (0: no, 1: una vez, 2: dos veces, 3: tres veces, 4: cuatro veces o más)
++ **NOT_NA_2_n**: Uso de AINEs en la UCI en el segundo día del período hospitalario (Numérica)
++ **NOT_NA_3_n**: Uso de AINEs en la UCI en el tercer día del período hospitalario (Numérica)
++ **LID_S_n**: Uso de lidocaína en la UCI (Binaria; 0: no, 1: sí)
++ **B_BLOK_S_n**: Uso de betabloqueadores en la UCI (Binaria; 0: no, 1: sí)
++ **ANT_CA_S_n**: Uso de bloqueadores de los canales de calcio en la UCI (Binaria; 0: no, 1: sí)
++ **GEPAR_S_n**: Uso de anticoagulantes (heparina) en la UCI (Binaria; 0: no, 1: sí)
++ **ASP_S_n**: Uso de ácido acetilsalicílico en la UCI (Binaria; 0: no, 1: sí)
++ **TIKL_S_n**: Uso de Ticlid en la UCI (Binaria; 0: no, 1: sí)
++ **TRENT_S_n**: Uso de Trental en la UCI (Binaria; 0: no, 1: sí)
+
+Complicaciones y resultados del infarto de miocardio:
+
++ **FIBR_PREDS**: Fibrilación auricular (Binaria; 0: no, 1: sí)
++ **PREDS_TAH**: Taquicardia supraventricular (Binaria; 0: no, 1: sí)
++ **JELUD_TAH**: Taquicardia ventricular (Binaria; 0: no, 1: sí)
++ **FIBR_JELUD**: Fibrilación ventricular (Binaria; 0: no, 1: sí)
++ **A_V_BLOK**: Bloqueo AV de tercer grado (Binaria; 0: no, 1: sí)
++ **OTEK_LANC**: Edema pulmonar (Binaria; 0: no, 1: sí)
++ **RAZRIV**: Ruptura miocárdica (Binaria; 0: no, 1: sí)
++ **DRESSLER**: Síndrome de Dressler (Binaria; 0: no, 1: sí)
++ **ZSN**: Insuficiencia cardíaca crónica (Binaria; 0: no, 1: sí)
++ **REC_IM**: Reinfarto miocárdico (Binaria; 0: no, 1: sí)
++ **P_IM_STEN**: Angina post-infarto (Binaria; 0: no, 1: sí)
++ **LET_IS**: Resultado letal (causa) (Categórica)  (0: desconocido (vivo), 1: shock cardiogénico, 2: edema pulmonar, 3: ruptura miocárdica, 4: progresión de insuficiencia cardíaca congestiva, 5: tromboembolismo, 6: asistolia, 7: fibrilación ventricular)
+
+
+El dataset permite gran cantidad de análiss y estudios. A fin del presente ejercicio y para conseguir el objetivo propuesto haremos una selección de variables, nos centraremos en variables de antecedentes, factores de riesgo y determinaciones de laboratorio  para ver su influencia en las complicaciones potencialmente mortales como son la fibrilación ventricular, la taquicardia ventricular,ruptura miocardica, el edema agudo de pulmón y el reinfarto. 
+
+Variables seleccionadas:
+
++ **AGE**: Edad del paciente (Numérica)
++ **SEX**: Género (Binaria; 0: femenino, 1: masculino)
+
+Antecedentes cardíacos
+
++ **INF_ANAM**: Cantidad de infartos previos (0, 1, 2, 3 o mas)
++ **IBS_POST**: Enfermedad coronaria reciente (Ordinal) (0 ninguna, 1 angina de esfuerzo, 2 angina inestable)
++ **IBS_NASL**: Antecedentes familiares de enfermedad coronaria  (Binaria; 0: no, 1: sí)
++ **SIM_GIPERT**: Hipertensión sintomática (Binaria; 0: no, 1: sí)
++ **nr_11**: Observación de arritmias previas (Binaria; 0: no, 1: sí)
++ **nr_04**: Fibrilación auricular persistente previa (Binaria; 0: no, 1: sí)
++ **nr_07**: Fibrilación ventricular previa (Binaria; 0: no, 1: sí)
++ **nr_08**: Taquicardia ventricular paroxística previa (Binaria; 0: no, 1: sí)
++ **np_04**: Bloqueo AV de tercer grado previo (Binaria; 0: no, 1: sí)
++ **np_08**: BCRHA completo previo (Binaria; 0: no, 1: sí)
++ **np_10**: BRDHA completo previo (Binaria; 0: no, 1: sí)
+
+patologías de otros sistemas
+
++ **endocr_01**: Diabetes mellitus en la anamnesis (Binaria; 0: no, 1: sí)
++ **endocr_02**: Obesidad en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_01**: Bronquitis crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_02**: Bronquitis crónica obstructiva en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_03**: Asma bronquial en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_04**: Neumonía crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_06**: Tuberculosis pulmonar en la anamnesis (Binaria; 0: no, 1: sí)
+
+
++ **S_AD_KBRIG**: Presión arterial sistólica según el equipo de cardiología de emergencia (mmHg) (Numérica)
++ **D_AD_KBRIG**: Presión arterial diastólica según el equipo de cardiología de emergencia (mmHg) (Numérica)
+
+Determinacioniies de laboratorio
+
++ **K_BLOOD**: Contenido de potasio en suero (mmol/L) (Numérica)
++ **NA_BLOOD**: Contenido de sodio en suero (mmol/L) (Numérica)
++ **ALT_BLOOD**: Contenido de AlAT en suero (IU/L) (Numérica)
++ **AST_BLOOD**: Contenido de AsAT en suero (IU/L) (Numérica)
++ **KFK_BLOOD**: Contenido de CPK en suero (IU/L) (Numérica)
++ **L_BLOOD**: Conteo de células blancas (billones por litro) (Numérica)
++ **ROE**: Velocidad de sedimentación eritrocítica (mm) (Numérica)
+
+Complicaciones y resultados del infarto de miocardio:
+
++ **JELUD_TAH**: Taquicardia ventricular (Binaria; 0: no, 1: sí)
++ **FIBR_JELUD**: Fibrilación ventricular (Binaria; 0: no, 1: sí)
++ **OTEK_LANC**: Edema pulmonar (Binaria; 0: no, 1: sí)
++ **RAZRIV**: Ruptura miocárdica (Binaria; 0: no, 1: sí)
++ **REC_IM**: Reinfarto miocárdico (Binaria; 0: no, 1: sí)
+**LET_IS**: Resultado letal (causa) (Categórica)  (0: desconocido (vivo), 1: shock cardiogénico, 2: edema pulmonar, 3: ruptura miocárdica, 4: progresión de insuficiencia cardíaca congestiva, 5: tromboembolismo, 6: asistolia, 7: fibrilación ventricular)
+
+# Selección de variables y creación de subconjunto
+
+El objetivo es quedarnos con variables relacionadas con:
+
+Antecedentes cardíacos
+
+Patologías de otros sistemas
+
+Parámetros de laboratorio
+
+Complicaciones relevantes
+
+La variable objetivo LET_IS (resultado letal).
+
+```{r}
+IM <- heart %>%
+  select(AGE, SEX, INF_ANAM, IBS_POST, IBS_NASL, SIM_GIPERT, nr_11, nr_04, nr_07, nr_08, np_04, np_08, np_10, endocr_01, endocr_02, zab_leg_01, zab_leg_02, zab_leg_03, zab_leg_04, zab_leg_06, S_AD_KBRIG, D_AD_KBRIG, K_BLOOD, NA_BLOOD, ALT_BLOOD, AST_BLOOD, KFK_BLOOD, L_BLOOD, ROE, JELUD_TAH, FIBR_JELUD, OTEK_LANC, RAZRIV, REC_IM,LET_IS)
+
+```
+
+# Detección de valores faltantes y eliminación de columnas no viables
+
+Vemos cuántos NA tiene cada columna, así como cuántas celdas vacías (""):
+
+
+```{r}
+colSums(is.na(IM))
+colSums(IM=="")
+```
+
+Puesto que existen variables que tienen una gran cantidad de datos faltantes(S_AD_KBRIG, D_AD_KBRIG y KFK_BLOOD) llegando casi a lal totalidad de las observaciones, se decide eliminarlas del estudio puesto que es imposible imputar tal cantidad de información
+
+```{r}
+IM <- heart %>%
+  select(AGE, SEX, INF_ANAM, IBS_POST, SIM_GIPERT, nr_11, nr_04, nr_07, nr_08, np_04, np_08, np_10, endocr_01, endocr_02, zab_leg_01, zab_leg_02, zab_leg_03, zab_leg_04, zab_leg_06, K_BLOOD, NA_BLOOD, ALT_BLOOD, AST_BLOOD, L_BLOOD, ROE, JELUD_TAH, FIBR_JELUD, OTEK_LANC, RAZRIV, REC_IM, LET_IS)
+str(IM)
+
+
+colSums(is.na(IM))
+colSums(IM=="")
+```
+
+Observamos que tenemos aun asi bastantes aproximadamente un 23% en las determinaciones de laboratorio, parece que no a todos los pacientes hubo tiempo de hacerles analitica de sangre para determinar ciertos parámetros
+
+# Visualización inicial de las variables numéricas (laboratorio)
+
+```{r}
+lab <- c('K_BLOOD', 'NA_BLOOD', 'ALT_BLOOD', 'AST_BLOOD', 'L_BLOOD', 'ROE')
+for (col in lab) {
+  print(
+    ggplot(IM, aes_string(x = col)) +
+      geom_histogram( fill = "tan", color = "gray") + 
+      theme_minimal() +
+      labs(title = paste("Distribución de", col),
+           x = col,
+           y = "Frecuencia"
+           ))}
+```
+
+# Imputación de variables
+
+
+Dada la variabilidad, y tras hacer pruebas viendo como modifica la distribución , decidimos imputar variables de laboratorio usando KNN
+
+```{r}
+recipe_obj <- recipe(~., data = IM) %>%
+  step_impute_knn(all_of(lab), neighbors = 5) %>%  
+  prep(training = IM, retain = TRUE)  
+
+IM <- bake(recipe_obj, new_data = NULL)
+
+colSums(is.na(IM))
+
+```
+
+```{r}
+for (col in lab) {
+  print(
+    ggplot(IM, aes_string(x = col)) +
+      geom_histogram( fill = "tan", color = "gray") + 
+      theme_minimal() +
+      labs(title = paste("Distribución de", col),
+           x = col,
+           y = "Frecuencia"
+           ))}
+```
+
+
+
+Explicamos rapidamente que suponen estos resultados.
+
+K_BLOOD (Potasio)
+Relación con el infarto: Los niveles de potasio pueden verse alterados después de un infarto. Una elevación o disminución puede ocurrir debido a los cambios en la dinámica cardiaca y renal.
+Hipocalcemia: Puede aumentar la toxicidad de los medicamentos cardíacos como los digitálicos.
+Hiperpotasemia: Puede causar cambios peligrosos en el electrocardiograma (ECG), como alteraciones en el ritmo cardíaco.
+
+NA_BLOOD (Sodio)
+Relación con el infarto: Los niveles de sodio pueden disminuir en pacientes con insuficiencia cardíaca que se desarrolla después de un infarto. La hiponatremia en estos casos puede ser un indicador de peor pronóstico.
+Hiponatremia: Se relaciona con un estado de hipervolemia en el contexto de la insuficiencia cardíaca.
+
+ALT_BLOOD (Alanina Aminotransferasa)
+Aunque el ALT es más específico del hígado, un aumento también puede ocurrir en casos de daño al tejido muscular, incluido el músculo cardíaco.
+Elevado: Comúnmente asociado con daño hepático, como hepatitis, cirrosis, o debido al consumo de sustancias tóxicas para el hígado (como algunos medicamentos o alcohol).
+
+AST_BLOOD (Aspartato Aminotransferasa)
+Relación con el infarto: Aunque el ALT es más específico del hígado, un aumento también puede ocurrir en casos de daño al tejido muscular, incluido el músculo cardíaco.
+Elevado: No es típicamente un marcador de daño cardíaco, pero podría elevarse si hay una lesión hepática secundaria.
+
+L_BLOOD (Lactato)
+Relación con el infarto: Niveles elevados de lactato pueden indicar una hipoxia tisular, que es una condición que puede acompañar un infarto, especialmente si hay shock o una perfusión tisular inadecuada.
+Elevado: Es un mal pronóstico en el contexto de un infarto, indicando que el tejido no está recibiendo suficiente oxígeno.
+
+ROE (Velocidad de Sedimentación de Eritrocitos)
+Relación con el infarto: Aunque no es específico, un ROE elevado puede indicar inflamación o daño tisular, lo cual puede estar presente en un infarto.
+Elevado: Puede reflejar una fase de inflamación aguda, aunque es un indicador poco específico en el contexto de un infarto.
+
+Resultado satisfaactorio sin una modificación excesiva de la distribución para tratar de mantener la robustez en los datos. El resto de NA los vamos a trabajar con la media en caso de numéricas y la moda en caso de categóricas, puesto que son muy pocos datos.
+
+```{r}
+IM <- IM %>%
+  mutate(AGE = ifelse(is.na(AGE), mean(AGE, na.rm = TRUE), AGE)) 
+
+cat_vars <- c("SEX", "INF_ANAM", "IBS_POST", "SIM_GIPERT", "nr_11", "nr_04", "nr_07", "nr_08", "np_04", "np_08", "np_10", "endocr_01", "endocr_02", "zab_leg_01", "zab_leg_02", "zab_leg_03", "zab_leg_04", "zab_leg_06")
+
+get_mode <- function(x) {
+  ux <- unique(na.omit(x))
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+IM <- IM %>%
+  mutate(across(all_of(cat_vars), ~ifelse(is.na(.), get_mode(.), .)))
+
+colSums(is.na(IM))
+```
+Ahora que hemos solventado el problema de los NA, vamos a ver como se comportan las variables. 
+
+# Exploración de variables y primeras conclusiones
+
+En primer lugar con los estadísticos
+
+```{r}
+summary(IM)
+```
+La media de edad está en torno a los 62 años. 
+
+Hacemos un recuento de las variables binarias para ver la cantidad de positivos que existen, números bastante reducidos dada la muestra
+
+```{r}
+bin <- c("SIM_GIPERT", "nr_11", "nr_04", "nr_07", "nr_08", "np_04", "np_08", "np_10", "endocr_01", "endocr_02", "zab_leg_01", "zab_leg_02", "zab_leg_03", "zab_leg_04", "zab_leg_06","JELUD_TAH", "FIBR_JELUD", "OTEK_LANC", "RAZRIV", "REC_IM")
+
+counts <- IM %>%
+  summarise(across(all_of(bin), ~sum(. == 1, na.rm = TRUE)))
+
+counts
+```
+Ahora veremos como se comportan gráficamente
+
+```{r}
+for (col in cat_vars) {
+  print(
+    ggplot(IM, aes_string(x = col)) +
+      geom_histogram(bins = 30, fill = "tan", color = "gray") + 
+      theme_minimal() +
+      labs(title = paste("Distribución de", col),
+           x = col,
+           y = "Frecuencia"
+           ))}
+```
+
+El sexo es predominantemente masculino, interesante que hay un predominio de personas que padecen angina inestable previa entre los pacientes con IM. Vemos que hay 0 casos de fibrilacion ventricular previa, lógico dado que suele ser una arritmia mortal, y una cantidad muy pequeña de taquicardia paroxística supraventricular y bloqueos AV de tercer grado, de rama izquierda y derecha. Si queu hay mas datos en caso de diabetes o bronquitis previa.Vamos a profundizar en todos los datos
+
+
+Ahora continuamos visualizando variables sobre las potenciales complicaciones
+
+```{r}
+compl <- c('JELUD_TAH', 'FIBR_JELUD', 'OTEK_LANC', 'RAZRIV', 'REC_IM', 'LET_IS')
+for (col in compl) {
+  print(
+    ggplot(IM, aes_string(x = col)) +
+      geom_histogram( fill = "tan", color = "gray") + 
+      theme_minimal() +
+      labs(title = paste("Distribución de", col),
+           x = col,
+           y = "Frecuencia"
+           ))}
+```
+
+Observamos que, afortunadamente, el número de complicaciones es bajo en términos generales, destacando el edema de pulmón y el reinfarto en los dias posteriores. Vamos a relacionarlos con la edad que suele ser un factor determinante. 
+
+Guardamos el csv para futuros scripts
+
+```{r}
+write.csv(IM, file = "IM.csv", row.names = FALSE)
+
+```
+
+```{r}
+ggplot(IM, aes(x = as.factor(OTEK_LANC), y = AGE, fill = as.factor(OTEK_LANC))) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Distribución de la Edad en Edema de Pulmón",
+       x = "Edema de Pulmón (0 = No, 1 = Sí)",
+       y = "Edad") +
+  theme_minimal()
+
+
+ggplot(IM, aes(x = as.factor(REC_IM), y = AGE, fill = as.factor(REC_IM))) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Distribución de la Edad en Reinfarto",
+       x = "Reinfarto (0 = No, 1 = Sí)",
+       y = "Edad") +
+  theme_minimal()
+```
+
+Como era de esperar, la edad parece inducir que las complicaciones sean mas frecuentes.Vamos a ver estas dos complicaciones como se comportan con la información de anamnesis que conocemos de los pacientes a ver si encontramos posibles relaciones en su comportamiento
+
+```{r}
+IM_long <- pivot_longer(
+  IM,
+  cols = c(endocr_01, endocr_02, zab_leg_01, zab_leg_02, zab_leg_03, zab_leg_04, zab_leg_06),
+  names_to = "Condition",
+  values_to = "Presence"
+)
+
+ggplot(IM_long, aes(x = as.factor(Presence), fill = as.factor(OTEK_LANC))) +
+  geom_bar(position = "fill") +
+  facet_wrap(~Condition, scales = "free_x") +
+  labs(title = "Relación entre Condiciones Médicas y edema de pulmón",
+       x = "Presencia de antecedente (0 = No, 1 = Sí)",
+       y = "Proporción") +
+  scale_fill_brewer(palette = "Pastel2", name = "Edema de Pulmón", labels = c("No", "Sí")) +
+  theme_minimal()
+
+
+ggplot(IM_long, aes(x = as.factor(Presence), fill = as.factor(REC_IM))) +
+  geom_bar(position = "fill") +
+  facet_wrap(~Condition, scales = "free_x") +
+  labs(title = "Relación entre Condiciones Médicas y reinfarto",
+       x = "Presencia de antecedente (0 = No, 1 = Sí)",
+       y = "Proporción") +
+  scale_fill_brewer(palette = "Pastel2", name = "Reinfarto", labels = c("No", "Sí")) +
+  theme_minimal()
+```
+En primer lugar generamos una nueva variable aunando la informacion de LET_IS en 0 vivo, 1 muerte para poder ver la influencia, ya que no nos interesa tanto el motivo de la muerte. Y vemos como inffluye la edad
+
+```{r}
+IM$DEAD <- ifelse(IM$LET_IS == 0, 0, 1)
+
+table(IM$DEAD)
+```
+```{r}
+ggplot(IM, aes(x = as.factor(DEAD), y = AGE, fill = as.factor(DEAD))) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Relacion de edad con muertes por IM",
+       x = "Muertes (0 = No, 1 = Sí)",
+       y = "Edad") +
+  theme_minimal()
+```
+
+Vamos a comprobar si los problemas endocrinos previos como la diabetes o la obesidad pueden ser predictores, veamos como se comportan con las posibles complicaciones
+```{r}
+IM_long2 <- pivot_longer(
+  IM,
+  cols = c(JELUD_TAH, FIBR_JELUD, OTEK_LANC, RAZRIV, REC_IM, DEAD),
+  names_to = "Complication2",
+  values_to = "Presence2"
+)
+
+ggplot(IM_long2, aes(x = as.factor(Presence2), fill = as.factor(endocr_01))) +
+  geom_bar(position = "fill") +
+  facet_wrap(~Complication2, scales = "free_x") +  
+  labs(title = "Relación entre diabetes y complicaciones",
+       x = "Presencia de Complicaciones (0 = No, 1 = Sí)",
+       y = "Proporción de diabetes") +
+  scale_fill_brewer(palette = "Pastel2", name = "Diabetes", labels = c("No", "Sí")) +
+  theme_minimal()
+
+ggplot(IM_long2, aes(x = as.factor(Presence2), fill = as.factor(endocr_02))) +
+  geom_bar(position = "fill") +
+  facet_wrap(~Complication2, scales = "free_x") + 
+  labs(title = "Relación entre obesidad y complicaciones",
+       x = "Presencia de Complicaciones (0 = No, 1 = Sí)",
+       y = "Proporción de obesidad") +
+  scale_fill_brewer(palette = "Pastel2", name = "Obesidad", labels = c("No", "Sí")) +
+  theme_minimal()
+```
+La obesidad parece tener relevancia en la ruptura miocardica y en la taquicardia ventricular, la diabetes  en el edema de pulmon y en el reinfarto como habiamos visto previamente. Ambos parecen influir en el fallecimiento tras el IM
+
+```{r}
+colSums(is.na(IM))
+
+```
+
+
+A continuación vamos a discretizar la variable potasio en base a si está bajo, alto o normal, esa variable está expresada en mmol/l
+
+```{r}
+IM$K_BLOOD_disc <- discretize(IM$K_BLOOD, 
+                                       method = "fixed", 
+                                       breaks = c(-Inf, 3.7, 5.2, Inf),
+                                       labels = c("Hipopotasemia", "Normal", "Hiperpotasemia"))
+
+table(IM$K_BLOOD_disc)
+```
+
+#Aproximación a PCA
+
+Dado el contexto de los datos se decide emplear PCA para reducir la dimensionalidad en los datos de laboratorio, SVD puede ser mas flexible y apto para datos mas dispersos y heterogéneos, dado el contexto clínico que manejamos es mejor emplear PCA y además de reducir la dimensionalidad poder encontrar relaciones subyacentes. 
+
+```{r}
+lab_data <- IM[, lab]
+lab_scaled <- scale(lab_data)
+pca_res <- prcomp(lab_scaled)
+summary(pca_res)
+```
+
+```{r}
+table(IM$LET_IS)
+
+```
+
+
+```{r}
+plot(pca_res$x[, 1:2], col = IM$LET_IS, pch = 16, 
+     main = "Gráfico de Dispersión de Componentes Principales (PCA)",
+     xlab = "PC1", ylab = "PC2")
+IM$LET_IS <- as.factor(IM$LET_IS)
+legend("topright", legend = levels(IM$LET_IS), col = 1:length(levels(IM$LET_IS)), pch = 16, cex = 0.8, title = "Desenlace")
+
+```
+No parece haber una relación clara enter las variables de laboratorio y el fallecimiento o causa del fallecimiento de los pacientes en ultima instancia. 
+
+#Conclusiones de la Exploración
+
+Se eliminaron algunas variables muy incompletas (S_AD_KBRIG, D_AD_KBRIG, KFK_BLOOD).
+
+Se aplicó KNN para imputar valores faltantes en parámetros de laboratorio (K_BLOOD, NA_BLOOD, etc.).
+
+Se observa un desbalance importante en las complicaciones: la mayoría de pacientes no presenta arritmias o desenlaces letales; algunos eventos son muy raros.
+
+La edad parece correlacionarse con un mayor riesgo de complicaciones (edema pulmonar, reinfarto, fallecimiento).
+
+Variables como diabetes mellitus y obesidad también muestran cierta relación con complicaciones específicas.
+
+PCA no revela grupos claros basados solo en los parámetros de laboratorio.

@@ -1,0 +1,558 @@
+
+
+
+```{r}
+library(readr)
+library(dplyr)
+library('ggplot2')
+library(tidymodels)
+library(fpc)
+library(NbClust)
+library(dbscan)
+```
+
+#Introducción
+
+El infarto de miocardio (IM) se produce cuando el flujo sanguíneo al corazón se ve interrumpido, ocasionando daño al músculo cardíaco. Además de su elevada mortalidad, el IM conlleva numerosas complicaciones, como insuficiencia cardíaca, arritmias y shock cardiogénico. Para analizar dichos eventos, se cuenta con un conjunto de datos recopilado entre 1992 y 1995 en Krasnoyarsk, que registra información clínica y de laboratorio de pacientes con IM, tanto en su ingreso como en días posteriores.
+
+El objetivo de este proyecto consiste en explorar cómo ciertas variables (edad, antecedentes, parámetros de laboratorio, etc.) pueden influir en la aparición de complicaciones, y experimentar con métodos de análisis que permitan identificar patrones en los datos (clustering, modelos predictivos, etc.). Con estos hallazgos, se busca ofrecer posibles enfoques para la toma de decisiones clínicas y la prevención de complicaciones tras un IM.
+
+# Carga y Descripción de Datos
+
+```{r}
+IM <- read.csv("data/IM.csv", row.names=NULL)
+
+str(IM)
+head(IM)
+```
+
+
+Un infarto de miocardio (IM), ocurre cuando el flujo de sangre hacia el corazón se ve interrumpido, causando daño al músculo cardíaco. Los síntomas más frecuentes incluyen dolor o molestia en el pecho que puede extenderse al hombro, brazo o mandíbula. Otros síntomas pueden incluir dificultad para respirar, náuseas y sudoración. Las complicaciones posibles de un IM incluyen insuficiencia cardíaca, arritmias y shock cardiogénico.
+En España, la incidencia muestra que para personas de 25 a 74 años oscila entre 135 y 210 casos por 100.000 personas-año en hombres y entre 29 y 61 casos por 100.000 en mujeres. Se trata de una patología relativamente frecuente y potencialmente mortal. 
+
+Las complicaciones del infarto de miocardio pueden tener un impacto significativo en la salud y la calidad de vida de los pacientes, así como en los costos de atención médica asociados. Desde insuficiencia cardíaca hasta arritmias cardiacas y shock cardiogénico, estas complicaciones pueden aumentar la morbimortalidad y prolongar la hospitalización, lo que resulta en una mayor carga tanto para los pacientes como para el sistema de salud en su conjunto.
+
+Además de su impacto clínico y económico, las complicaciones del infarto de miocardio también plantean desafíos en términos de gestión clínica y toma de decisiones. La identificación temprana y la prevención de estas complicaciones son fundamentales para mejorar los resultados clínicos y la supervivencia de los pacientes con infarto de miocardio.
+
+El reconocimiento de patrones y la extracción de datos en un contexto clínico, como con un IM, son cruciales para identificar y prevenir complicaciones potenciales. Se ha seleccionado un dataset recopilado entre 1992 y 1995 en Krasnoyarsk. Disponible tanto en kaggle como en UC Irvine Machine Learning Repository, DOI:10.25392/leicester.data.12045261.v3, este dataset acumula datos referentes a IM en el momento de la admisión del paciente como de dias posteriores, lo cual permite analizar la evolución y monitorizar las posibles complicaciones que puedan aparecer. 
+
+El objetivo propuesto es analizar cómo influye el estado del paciente con IM y sus valores de laboratorio en el momento de la admisión en urgencias y estancia hospitalaria en las potenciales complicaciones que pueuda sufrir durante la estancia en UCI.Esto aporta un gran valor dado que permitirá a los profesionales hacer un abordaje mucho mas personalizado y prevenir dichas complicaciones.
+
+Las variables seleccionadas son:
+
++ **AGE**: Edad del paciente (Numérica)
++ **SEX**: Género (Binaria; 0: femenino, 1: masculino)
+
+Antecedentes cardíacos
+
++ **INF_ANAM**: Cantidad de infartos previos (0, 1, 2, 3 o mas)
++ **IBS_POST**: Enfermedad coronaria reciente (Ordinal) (0 ninguna, 1 angina de esfuerzo, 2 angina inestable)
++ **IBS_NASL**: Antecedentes familiares de enfermedad coronaria  (Binaria; 0: no, 1: sí)
++ **SIM_GIPERT**: Hipertensión sintomática (Binaria; 0: no, 1: sí)
++ **nr_11**: Observación de arritmias previas (Binaria; 0: no, 1: sí)
++ **nr_04**: Fibrilación auricular persistente previa (Binaria; 0: no, 1: sí)
++ **nr_07**: Fibrilación ventricular previa (Binaria; 0: no, 1: sí)
++ **nr_08**: Taquicardia ventricular paroxística previa (Binaria; 0: no, 1: sí)
++ **np_04**: Bloqueo AV de tercer grado previo (Binaria; 0: no, 1: sí)
++ **np_08**: BCRHA completo previo (Binaria; 0: no, 1: sí)
++ **np_10**: BRDHA completo previo (Binaria; 0: no, 1: sí)
+
+patologías de otros sistemas
+
++ **endocr_01**: Diabetes mellitus en la anamnesis (Binaria; 0: no, 1: sí)
++ **endocr_02**: Obesidad en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_01**: Bronquitis crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_02**: Bronquitis crónica obstructiva en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_03**: Asma bronquial en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_04**: Neumonía crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_06**: Tuberculosis pulmonar en la anamnesis (Binaria; 0: no, 1: sí)
+
+
+
+Determinaciones de laboratorio
+
++ **K_BLOOD**: Contenido de potasio en suero (mmol/L) (Numérica)
++ **NA_BLOOD**: Contenido de sodio en suero (mmol/L) (Numérica)
++ **ALT_BLOOD**: Contenido de AlAT en suero (IU/L) (Numérica)
++ **AST_BLOOD**: Contenido de AsAT en suero (IU/L) (Numérica)
++ **L_BLOOD**: Conteo de células blancas (billones por litro) (Numérica)
++ **ROE**: Velocidad de sedimentación eritrocítica (mm) (Numérica)
+
+Complicaciones y resultados del infarto de miocardio:
+
++ **JELUD_TAH**: Taquicardia ventricular (Binaria; 0: no, 1: sí)
++ **FIBR_JELUD**: Fibrilación ventricular (Binaria; 0: no, 1: sí)
++ **OTEK_LANC**: Edema pulmonar (Binaria; 0: no, 1: sí)
++ **RAZRIV**: Ruptura miocárdica (Binaria; 0: no, 1: sí)
++ **REC_IM**: Reinfarto miocárdico (Binaria; 0: no, 1: sí)
++ **LET_IS**: Resultado letal (causa) (Categórica)  (0: desconocido (vivo), 1: shock cardiogénico, 2: edema pulmonar, 3: ruptura miocárdica, 4: progresión de insuficiencia cardíaca congestiva, 5: tromboembolismo, 6: asistolia, 7: fibrilación ventricular)
+
+Se comprueba si hay valores faltantes o cadenas vacías:
+
+```{r}
+colSums(is.na(IM))
+colSums(IM=="")
+```
+
+Se observan estadísticos generales:
+
+```{r}
+summary(IM)
+```
+
+Explorar la distribución de variables:
+
+```{r}
+bin <- c("SIM_GIPERT", "nr_11", "nr_04", "nr_07", "nr_08", "np_04", "np_08", "np_10",
+         "endocr_01", "endocr_02", "zab_leg_01", "zab_leg_02", "zab_leg_03", "zab_leg_04",
+         "zab_leg_06", "JELUD_TAH", "FIBR_JELUD", "OTEK_LANC", "RAZRIV", "REC_IM")
+result_list <- list()
+
+for (var in bin) {
+  freq <- table(IM[[var]])
+  prop <- prop.table(freq)
+  result_df <- data.frame(Variable=var, Value=names(freq), Count=as.numeric(freq), Proportion=as.numeric(prop))
+  result_list[[var]] <- result_df
+}
+
+final_result <- do.call(rbind, result_list)
+
+print(final_result)
+```
+
+# Algoritmo No Supervisado: Clustering K-Means
+
+Se aplica un algoritmo no supervisado, en este caso se va a usar clustering con el objetivo de poder establecer grupos, para estimar el número de clusters vamos a utilizar el método del codo o el índice Sum of squared within (SSW).
+
+```{r}
+variables_continuas <- c("AGE", "K_BLOOD", "NA_BLOOD", 
+                         "ALT_BLOOD", "AST_BLOOD", "L_BLOOD", "ROE")
+variables_binarias <- c("SEX", "INF_ANAM", "IBS_POST", "SIM_GIPERT", "nr_11", "nr_04", 
+                        "nr_07", "nr_08", "np_04", "np_08", "np_10", "endocr_01", 
+                        "endocr_02", "zab_leg_01", "zab_leg_02", "zab_leg_03", 
+                        "zab_leg_04", "zab_leg_06", "JELUD_TAH", "FIBR_JELUD", 
+                        "OTEK_LANC", "RAZRIV", "REC_IM")
+
+data_clustering <- IM %>%
+  select(all_of(variables_continuas), all_of(variables_binarias))
+
+data_clustering[variables_continuas] <- scale(data_clustering[variables_continuas])
+
+data_clustering
+```
+
+
+```{r}
+result <- rep(0, 15)
+for (i in 2:15) {
+  out <- kmeans(data_clustering, i, nstart = 25)
+  result[i] <- out$tot.withinss
+}
+
+plot(2:15, result[2:15], type="b", col="tan", pch=0, xlab="Número de clusters", ylab="SSW",
+     main="Método del Codo para determinar el número óptimo de clusters")
+
+```
+
+
+```{r}
+sil_width <- numeric(15)
+
+for (i in 2:15) {
+  km.res <- kmeans(data_clustering, centers = i, nstart = 25)
+  sil <- silhouette(km.res$cluster, dist(data_clustering))
+  sil_width[i] <- mean(sil[, 3])
+}
+
+plot(1:15, sil_width, type = "b", xlab = "Número de clusters", ylab = "Ancho promedio de la silueta")
+
+```
+Según el método del codo nos encontramos con que el número óptimo de clusters sería entre 4 y 5 y según Silhouettte sería 2. Vamos a usar por ultimo el criterio de Calinski and Harabasz y el criterio de average silhouette width para tratar de estimar la K.
+
+```{r}
+out_ch  <- kmeansruns(data_clustering, krange = 1:10, criterion = "ch") 
+out_ch$bestk
+
+out_asw  <- kmeansruns(data_clustering, krange = 1:10, criterion = "asw") 
+out_asw$bestk
+
+
+plot(1:10,out_ch$crit,type="o",col="tan",pch=0,xlab="Número de clústers",ylab="Criterio Calinski-Harabasz")
+plot(1:10,out_asw$crit,type="o",col="tan",pch=0,xlab="Número de clústers",ylab="ASW")
+```
+Tanto con el criterio de Calinski and Harabasz como ASW nos dice que aproximadamente 3 es el número de cluster óptimo. Por lo que vamos a tomar entre 2 y 5 como nos han dicho las estimaciones. 
+
+
+```{r}
+set.seed(123)
+
+IM2clusters <- kmeans(data_clustering, 2)
+IM3clusters <- kmeans(data_clustering, 3)
+IM4clusters <- kmeans(data_clustering, 4)
+IM5clusters <- kmeans(data_clustering, 5)
+
+IM$Cluster2 <- IM2clusters$cluster
+IM$Cluster3 <- IM3clusters$cluster
+IM$Cluster4 <- IM4clusters$cluster
+IM$Cluster5 <- IM5clusters$cluster
+```
+
+Vamos a aplicar 3 métricas de evaluación Sum of Squared Within (SSW) para la cohesión de lso clusteres, Silhouette y Calinski_Harabasz
+
+
+```{r}
+validation_results <- list()
+
+silhouette_2 <- silhouette(IM2clusters$cluster, dist(data_clustering))
+avg_silhouette_2 <- mean(silhouette_2[, 3])
+
+cluster_stats_2 <- cluster.stats(d = dist(data_clustering), clustering = IM2clusters$cluster)
+ch_2 <- cluster_stats_2$ch
+ssw_2 <- cluster_stats_2$within.cluster.ss
+
+validation_results[["Cluster2"]] <- c("Avg_Silhouette" = avg_silhouette_2, 
+                                      "Calinski_Harabasz" = ch_2, 
+                                      "SSW" = ssw_2)
+            
+
+silhouette_3 <- silhouette(IM3clusters$cluster, dist(data_clustering))
+avg_silhouette_3 <- mean(silhouette_3[, 3])
+
+cluster_stats_3 <- cluster.stats(d = dist(data_clustering), clustering = IM3clusters$cluster)
+ch_3 <- cluster_stats_3$ch
+ssw_3 <- cluster_stats_3$within.cluster.ss
+
+validation_results[["Cluster3"]] <- c("Avg_Silhouette" = avg_silhouette_3, 
+                                      "Calinski_Harabasz" = ch_3, 
+                                      "SSW" = ssw_3)
+
+silhouette_4 <- silhouette(IM4clusters$cluster, dist(data_clustering))
+avg_silhouette_4 <- mean(silhouette_4[, 3])
+
+cluster_stats_4 <- cluster.stats(d = dist(data_clustering), clustering = IM4clusters$cluster)
+ch_4 <- cluster_stats_4$ch
+ssw_4 <- cluster_stats_4$within.cluster.ss
+
+validation_results[["Cluster4"]] <- c("Avg_Silhouette" = avg_silhouette_4, 
+                                      "Calinski_Harabasz" = ch_4, 
+                                      "SSW" = ssw_4) 
+
+silhouette_5 <- silhouette(IM5clusters$cluster, dist(data_clustering))
+avg_silhouette_5 <- mean(silhouette_5[, 3])
+
+cluster_stats_5 <- cluster.stats(d = dist(data_clustering), clustering = IM5clusters$cluster)
+ch_5 <- cluster_stats_5$ch
+ssw_5 <- cluster_stats_5$within.cluster.ss
+
+validation_results[["Cluster5"]] <- c("Avg_Silhouette" = avg_silhouette_5, 
+                                      "Calinski_Harabasz" = ch_5, 
+                                      "SSW" = ssw_5) 
+
+validation_results_df <- as.data.frame(do.call(rbind, validation_results))
+
+print(validation_results_df)
+```
+
+Se observa que el cluster 2 es el que mejor resultado tiene en Silhouette y Calinski_Harabasz sin embargo, SSW disminuye con más clusters, lo cual puede ser normal, no tiene tanta relevancia como las otras dos métricas en la determinación del número óptimo de clusters. 
+Vamos a determinar cada cluster que se ha generado darle una interpretación y asignarle unas características
+
+
+```{r}
+cluster_summary_2 <- IM %>%
+  group_by(Cluster2) %>%
+  summarise_all(list(mean = mean, median = median, sd = sd))
+
+print(cluster_summary_2)
+```
+Para ver si existen diferencias significativas entre clusters y poder determinar cuales son las variables se hace una comparacion de medias entre los clusters. 
+
+```{r}
+anova_results <- data.frame(Variable = character(), p_value = numeric(), Significant = logical(), stringsAsFactors = FALSE)
+
+for (variable in variables_continuas) {
+  formula <- as.formula(paste(variable, "~ Cluster2"))
+  anova <- aov(formula, data = IM)
+  p_value <- summary(anova)[[1]][["Pr(>F)"]][1]
+  anova_results <- rbind(anova_results, data.frame(Variable = variable, p_value = p_value, Significant = p_value < 0.05))
+}
+print(anova_results)
+```
+
+Aplicando una comparación de medias usando ANOVA se obererva que existen diferencias significativas entre los clusters en edad, potasio, sodio, ALT, AST, celulas blancas enn sangre y velocidad de sedimentación. ESto sugiere que los clusters tienen diferencias entre si en estas variables de edad y parámetros de laboratorio. 
+
+```{r}
+chi_square_results <- list()
+for (variable in variables_binarias) {
+  tbl <- table(IM[[variable]], IM$Cluster2)
+  p_value <- chisq.test(tbl)$p.value
+  chi_square_results[[variable]] <- p_value
+}
+
+chi_square_results_df <- data.frame(Variable = names(chi_square_results), p_value = unlist(chi_square_results))
+chi_square_results_df$Significant <- chi_square_results_df$p_value < 0.05
+
+print(chi_square_results_df)
+```
+
+
+Para las variables categóricas se usa el test de chi-cuadrado para comparar ambos clusters, sacando diferencias significativas en sexo, historial de infartos y presencia de enfermedad coronaria. 
+En resumen podemos extraer que los clusters que hemos identificado preesentan diferencias en características como Edad, niveles de potasio, sodio, ALT, AST y células blancas en sangre, velocidad de sedimentación eritrocítica, distribución de sexo, historial de infartos y presencia de enfermedad coronaria reciente
+
+```{r}
+cluster_counts <- table(IM$Cluster2)
+print(cluster_counts)
+```
+Observamos que los clusters no están balanceados. Puede ser por sesgo en los datos, probablemente ya que comprobamos anteriormente que los datos estaban algo sesgados, el grupo 1 parece pertenecer a pacientes con perfiles clinicos mas raros o que son menos comunes. 
+El grupo 1 podría ser el reflejo de las variaciones de la condición clínica de los pacientes, siendo estos con condiciones mas específicas que pudieran requerir cun tratamiento diferente. 
+
+```{r}
+ggplot(IM, aes(x = AGE, y = AST_BLOOD, color = factor(Cluster2))) +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(title = "Gráfico de Dispersión de Edad y Niveles de AST en Sangre",
+       x = "Edad",
+       y = "AST",
+       color = "Cluster") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+
+
+ggplot(IM, aes(x = AST_BLOOD, y = ROE, color = factor(Cluster2))) +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(title = "Gráfico de Dispersión de AST y velocidad de sedimentación",
+       x = "AST",
+       y = "velocidad de sedimentación",
+       color = "Cluster") +
+  theme_minimal()
+```
+```{r}
+cluster_summary <- IM %>%
+  group_by(Cluster2) %>%
+  summarise(across(c(AGE, K_BLOOD, NA_BLOOD, ALT_BLOOD, AST_BLOOD, L_BLOOD, ROE), 
+                   list(mean = mean, median = median, sd = sd), .names = "{col}_{fn}"))
+
+print(cluster_summary)
+
+
+```
+```{r}
+categorical_summary <- IM %>%
+  group_by(Cluster2) %>%
+  summarise(
+    SEX_0 = sum(SEX == 0),
+    SEX_1 = sum(SEX == 1),
+    SEX_0_prop = mean(SEX == 0),
+    SEX_1_prop = mean(SEX == 1),
+    INF_ANAM_0 = sum(INF_ANAM == 0),
+    INF_ANAM_1 = sum(INF_ANAM == 1),
+    INF_ANAM_2 = sum(INF_ANAM == 2),
+    INF_ANAM_3 = sum(INF_ANAM == 3),
+    INF_ANAM_0_prop = mean(INF_ANAM == 0),
+    INF_ANAM_1_prop = mean(INF_ANAM == 1),
+    INF_ANAM_2_prop = mean(INF_ANAM == 2),
+    INF_ANAM_3_prop = mean(INF_ANAM == 3),
+    IBS_POST_0 = sum(IBS_POST == 0),
+    IBS_POST_1 = sum(IBS_POST == 1),
+    IBS_POST_2 = sum(IBS_POST == 2),
+    IBS_POST_0_prop = mean(IBS_POST == 0),
+    IBS_POST_1_prop = mean(IBS_POST == 1),
+    IBS_POST_2_prop = mean(IBS_POST == 2)
+  )
+
+print(categorical_summary)
+```
+El Cluster 1 se caracteriza por tener una mayor proporción de hombres y una menor proporción de pacientes con 2 o más infartos previos. Además, una mayor proporción de pacientes en este cluster no tienen enfermedad coronaria reciente. También apunta a que los pacientes son mas jovenes y tienen niveles mayores de ALT y AST
+El Cluster 2 tiene una mayor proporción de mujeres y una mayor proporción de pacientes con 2 o más infartos previos. Además, una mayor proporción de pacientes en este cluster tienen angina inestable. Suelen ser personas mas mayores con niveles mas altos de sodio y mayor velocidad de sedimentación.
+
+Estas características definitorias pueden hacer que se personalice el tratamiento y la atención médica. 
+
+```{r}
+mortalidad_summary <- IM %>%
+  group_by(Cluster2) %>%
+  summarise(
+
+    LET_IS_0_prop = mean(LET_IS == 0),
+    LET_IS_1_prop = mean(LET_IS == 1),
+    LET_IS_2_prop = mean(LET_IS == 2),
+    LET_IS_3_prop = mean(LET_IS == 3),
+    LET_IS_4_prop = mean(LET_IS == 4),
+    LET_IS_5_prop = mean(LET_IS == 5),
+    LET_IS_6_prop = mean(LET_IS == 6),
+    LET_IS_7_prop = mean(LET_IS == 7)
+  )
+
+print(mortalidad_summary)
+```
+Como podemos apreciar los pacientes del cluster 1 son mas proclives a sobrevivir o a desarrollar una insuficiencia cardiaca congestiva, los del cluster 2 tienen mas riesgo de padecer todas las complicacioines potenciales edema pulmonar, ruptura miocardica, tromboembolismos, asistolia o fibrilacion ventricular. Lo que parece indicar que el cluster 2 presenta mayor gravedad en sus complicacioines de salud. 
+
+# Distancia Euclidiana vs Manhattan
+
+
+Ahora se va a utilizar la distancia de Manhattan en lugar de la euclidiana que es la que se ejecuta por defecto, tomamos 2 clusters como se ha determinado anterioirmente. 
+
+```{r}
+variables_continuas <- c("AGE", "K_BLOOD", "NA_BLOOD", 
+                         "ALT_BLOOD", "AST_BLOOD", "L_BLOOD", "ROE")
+variables_binarias <- c("SEX", "INF_ANAM", "IBS_POST", "SIM_GIPERT", "nr_11", "nr_04", 
+                        "nr_07", "nr_08", "np_04", "np_08", "np_10", "endocr_01", 
+                        "endocr_02", "zab_leg_01", "zab_leg_02", "zab_leg_03", 
+                        "zab_leg_04", "zab_leg_06", "JELUD_TAH", "FIBR_JELUD", 
+                        "OTEK_LANC", "RAZRIV", "REC_IM")
+
+data_clustering <- IM %>%
+  select(all_of(variables_continuas), all_of(variables_binarias))
+
+data_clustering[variables_continuas] <- scale(data_clustering[variables_continuas])
+
+distance_matrix <- dist(data_clustering, method = "manhattan")
+
+set.seed(123)  
+pam_result <- pam(distance_matrix, k = 2)  
+
+IM$Cluster_Manhattan <- pam_result$clustering
+
+print(table(IM$Cluster_Manhattan))
+```
+Obtenemos un resultaddo bastante mas balanceado que utilizando la distancia euclidiana. 
+Métricas de evaluación para ver los resultados y comparar. 
+
+```{r}
+silhouette_pam <- silhouette(pam_result$clustering, distance_matrix)
+avg_silhouette_pam <- mean(silhouette_pam[, 3])
+cluster_stats_pam <- cluster.stats(d = distance_matrix, clustering = pam_result$clustering)
+ch_pam <- cluster_stats_pam$ch
+ssw_pam <- cluster_stats_pam$within.cluster.ss
+
+validation_results[["PAM_Manhattan"]] <- c("Avg_Silhouette" = avg_silhouette_pam, 
+                                           "Calinski_Harabasz" = ch_pam, 
+                                           "SSW" = ssw_pam)
+
+validation_results_df <- as.data.frame(do.call(rbind, validation_results))
+
+print(validation_results_df)
+```
+El coeficieinte de silhouette indica que los clusters no están muy bien definidos, el indice de  Calinski-Harabasz nos dice que el modelo tiene una buena estructura y SSW presenta un valor alto indicando que hay bastante dispersión. 
+Si comapramos estas métricas con la distanciai euclidiana obtenida anteiormente lo que mas destaca es la diferenciai en SSW que nos indica que el mdoelo empleado anteriormente tenia mucha mas cohesion y sus centroides estaban mucho mas agrupados. 
+En términos generales las métricas eran mejores en la opción anterior
+
+```{r}
+anova_results_manhattan <- data.frame(Variable = character(), p_value = numeric(), Significant = logical(), stringsAsFactors = FALSE)
+
+for (variable in variables_continuas) {
+  formula <- as.formula(paste(variable, "~ Cluster_Manhattan"))
+  anova <- aov(formula, data = IM)
+  p_value <- summary(anova)[[1]][["Pr(>F)"]][1]
+  anova_results_manhattan <- rbind(anova_results_manhattan, data.frame(Variable = variable, p_value = p_value, Significant = p_value < 0.05))
+}
+
+print(anova_results_manhattan)
+
+```
+
+```{r}
+chi_square_results_manhattan <- list()
+
+for (variable in variables_binarias) {
+  tbl <- table(IM[[variable]], IM$Cluster_Manhattan)
+  p_value <- chisq.test(tbl)$p.value
+  chi_square_results_manhattan[[variable]] <- p_value
+}
+
+chi_square_results_df_m <- data.frame(
+  Variable = names(chi_square_results_manhattan),
+  p_value = unlist(chi_square_results_manhattan)
+)
+
+chi_square_results_df_m$Significant <- chi_square_results_df_m$p_value < 0.05
+
+print(chi_square_results_df_m)
+
+```
+
+En comparación las variables continuas parece que son significativas en ambos métodos excepto AST y las categóricas la única que es singificativa es la fibrilacion ventricular. 
+En términos generales empleando la distancia euclidiana se obtienen resultados mas robustos y mas consistentes que empleando la distancia de Manhattan. 
+
+```{r}
+nb <- NbClust(data_clustering, distance = "euclidean", min.nc = 2, max.nc = 4, method = "kmeans")
+nb
+
+```
+```{r}
+nb <- NbClust(data_clustering, distance = "manhattan", min.nc = 2, max.nc = 4, method = "kmeans")
+nb
+```
+Utilizando nbclust para comparar el número optimo de clusters utilizando ambas distancias los resultados son iguales, pero al ver las representacioneos gráficas que hemos  hecho previamente nos invita a pensar que 2 es un número mas óptimo que ademas coincide con anteriores métricas empleadas. 
+
+
+# DBSCAN y OPTICS
+
+
+Lanzamos optics y fijamos diferentes criterios de minPts para ver como se comporta
+```{r}
+minPts_values <- c(5, 10, 20, 50)
+
+
+for (minPts in minPts_values) {
+  opt <- optics(data_clustering, minPts = minPts)
+  plot(opt, main = paste("Reachability Plot with minPts =", minPts))
+}
+
+opt
+```
+Observamos que 10 y 20 parece un buen punto de minPts, donde se ven dos grupos diferenciados haciendo un valle al iniicio y una suubida al final probablemente por outliers. 
+```{r}
+optics <- optics(data_clustering, minPts = 10)
+optics
+```
+
+
+```{r}
+plot(data_clustering[, c(1, 5)], col = "tan", main = "Variables 1 y 5")
+polygon(data_clustering[opt$order, c(1, 5)])
+```
+Optics nos da un valor epsilon de NA, probablemente porque los datos no son adecuados para este algoritmo ya qu eno presentan clusteres lo suficientemente densos o la distribución no es la adecuada. TEniendo en cuneta el Reachability Plot estimamos varios eps_cl probables
+
+```{r}
+dbscan <- extractDBSCAN(optics, eps_cl = 1.5)
+dbscan
+plot(dbscan) 
+
+dbscan <- extractDBSCAN(optics, eps_cl = 2)
+dbscan
+plot(dbscan) 
+
+dbscan <- extractDBSCAN(optics, eps_cl = 4)
+dbscan
+plot(dbscan) 
+```
+Tomamos un valor de eps_cl de 1.5 y representamos 
+
+```{r}
+dbscan <- extractDBSCAN(optics, eps_cl = 1.5)
+
+hullplot (data_clustering, dbscan)
+```
+La mayoria de los datos se ven agrupadas en un solo cluster principal, y se logra vislumbrar otro cluster mas pequeño, habiendo zonas muy densas con una mayor concentracion de los datos. Sin embargo vemos mucho ruido en los datos.
+Con las técnicas anteriores también se habiain conseguido resultados cuestionables a la hora de realizar una agrupación. La mala distribución y complejidad de los datos no permite determinar clusters solidos. Sería interesante tratar de mejorar los datos para obtener mejores resultados. 
+
+# Conclusiones (Análisis No Supervisado)
+
+Los resultados de K-means con dos clusters apuntan a cierta separación de pacientes según variables clínicas y de laboratorio:
+
+Cluster 1
+
+Mayor proporción de hombres, menos infartos previos, menores niveles de sodio y velocidad de sedimentación.
+
+Pacientes más jóvenes, con valores más elevados de ALT y AST.
+
+Mayor probabilidad de supervivencia o evolución hacia insuficiencia cardíaca congestiva.
+
+Cluster 2
+
+Mayor proporción de mujeres, más infartos previos y frecuente presencia de angina inestable.
+
+Pacientes de mayor edad, con niveles de sodio y velocidad de sedimentación superiores.
+
+Más propensos a complicaciones graves (edema pulmonar, ruptura miocárdica, tromboembolismos, asistolia o fibrilación ventricular).
+
+Pese a esta aparente segmentación, la naturaleza de los datos (desbalance de clases, ruido, incompletitud en algunas variables, etc.) dificulta la obtención de clusters realmente robustos. Si bien indicadores como el método del codo o la silueta sugerían un número de clusters concreto, la representación final no mostró separaciones claramente útiles en el ámbito clínico. En consecuencia, estos métodos de clustering presentan utilidad limitada en este contexto, pues no se logra una división lo suficientemente sólida ni fácil de interpretar para la práctica real.

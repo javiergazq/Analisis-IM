@@ -1,0 +1,404 @@
+
+
+```{r}
+library(readr)
+library(dplyr)
+library('ggplot2')
+library(tidymodels)
+library(caret)
+library(rpart)
+library(DescTools)
+library(gridExtra)
+library(C50)
+library(smotefamily)
+library(gmodels)
+library(randomForest)
+library(iml)
+library(pROC)
+library(reshape2)
+```
+
+#Introducción
+
+En este documento se implementan modelos de aprendizaje supervisado para predecir el desenlace de un paciente con Infarto de Miocardio (IM), utilizando un conjunto de datos recogido entre 1992 y 1995 en Krasnoyarsk. Entre otros factores, se consideran variables clínicas y de laboratorio (edad, sexo, recuento de glóbulos blancos, niveles de potasio y sodio, etc.), así como eventos adversos (ruptura miocárdica, edema pulmonar, shock cardiogénico, etc.).
+La variable a predecir se denomina LET_IS (resultado letal o no letal con su causa). Observaremos diversas técnicas (árboles C5.0, C5.0 con boosting, random forest) y discutiremos sus limitaciones, especialmente debidas al desbalance de clases.
+A continuación comenzamos cargando el dataset
+
+# Carga y Descripción de Datos
+
+```{r}
+path = 'IM.CSV'
+IM_s <- read.csv("data/IM.csv", row.names=NULL)
+
+str(IM_s)
+head(IM_s)
+```
+
+Un infarto de miocardio (IM), ocurre cuando el flujo de sangre hacia el corazón se ve interrumpido, causando daño al músculo cardíaco. Los síntomas más frecuentes incluyen dolor o molestia en el pecho que puede extenderse al hombro, brazo o mandíbula. Otros síntomas pueden incluir dificultad para respirar, náuseas y sudoración. Las complicaciones posibles de un IM incluyen insuficiencia cardíaca, arritmias y shock cardiogénico.
+En España, la incidencia muestra que para personas de 25 a 74 años oscila entre 135 y 210 casos por 100.000 personas-año en hombres y entre 29 y 61 casos por 100.000 en mujeres. Se trata de una patología relativamente frecuente y potencialmente mortal. 
+
+Las complicaciones del infarto de miocardio pueden tener un impacto significativo en la salud y la calidad de vida de los pacientes, así como en los costos de atención médica asociados. Desde insuficiencia cardíaca hasta arritmias cardiacas y shock cardiogénico, estas complicaciones pueden aumentar la morbimortalidad y prolongar la hospitalización, lo que resulta en una mayor carga tanto para los pacientes como para el sistema de salud en su conjunto.
+
+Además de su impacto clínico y económico, las complicaciones del infarto de miocardio también plantean desafíos en términos de gestión clínica y toma de decisiones. La identificación temprana y la prevención de estas complicaciones son fundamentales para mejorar los resultados clínicos y la supervivencia de los pacientes con infarto de miocardio.
+
+El reconocimiento de patrones y la extracción de datos en un contexto clínico, como con un IM, son cruciales para identificar y prevenir complicaciones potenciales. Se ha seleccionado un dataset recopilado entre 1992 y 1995 en Krasnoyarsk. Disponible tanto en kaggle como en UC Irvine Machine Learning Repository, DOI:10.25392/leicester.data.12045261.v3, este dataset acumula datos referentes a IM en el momento de la admisión del paciente como de dias posteriores, lo cual permite analizar la evolución y monitorizar las posibles complicaciones que puedan aparecer. 
+
+El objetivo propuesto es analizar cómo influye el estado del paciente con IM y sus valores de laboratorio en el momento de la admisión en urgencias y estancia hospitalaria en las potenciales complicaciones que pueuda sufrir durante la estancia en UCI.Esto aporta un gran valor dado que permitirá a los profesionales hacer un abordaje mucho mas personalizado y prevenir dichas complicaciones.
+
+Las variables seleccionadas son:
+
++ **AGE**: Edad del paciente (Numérica)
++ **SEX**: Género (Binaria; 0: femenino, 1: masculino)
+
+Antecedentes cardíacos
+
++ **INF_ANAM**: Cantidad de infartos previos (0, 1, 2, 3 o mas)
++ **IBS_POST**: Enfermedad coronaria reciente (Ordinal) (0 ninguna, 1 angina de esfuerzo, 2 angina inestable)
++ **IBS_NASL**: Antecedentes familiares de enfermedad coronaria  (Binaria; 0: no, 1: sí)
++ **SIM_GIPERT**: Hipertensión sintomática (Binaria; 0: no, 1: sí)
++ **nr_11**: Observación de arritmias previas (Binaria; 0: no, 1: sí)
++ **nr_04**: Fibrilación auricular persistente previa (Binaria; 0: no, 1: sí)
++ **nr_07**: Fibrilación ventricular previa (Binaria; 0: no, 1: sí)
++ **nr_08**: Taquicardia ventricular paroxística previa (Binaria; 0: no, 1: sí)
++ **np_04**: Bloqueo AV de tercer grado previo (Binaria; 0: no, 1: sí)
++ **np_08**: BCRHA completo previo (Binaria; 0: no, 1: sí)
++ **np_10**: BRDHA completo previo (Binaria; 0: no, 1: sí)
+
+patologías de otros sistemas
+
++ **endocr_01**: Diabetes mellitus en la anamnesis (Binaria; 0: no, 1: sí)
++ **endocr_02**: Obesidad en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_01**: Bronquitis crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_02**: Bronquitis crónica obstructiva en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_03**: Asma bronquial en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_04**: Neumonía crónica en la anamnesis (Binaria; 0: no, 1: sí)
++ **zab_leg_06**: Tuberculosis pulmonar en la anamnesis (Binaria; 0: no, 1: sí)
+
+
+
+Determinaciones de laboratorio
+
++ **K_BLOOD**: Contenido de potasio en suero (mmol/L) (Numérica)
++ **NA_BLOOD**: Contenido de sodio en suero (mmol/L) (Numérica)
++ **ALT_BLOOD**: Contenido de AlAT en suero (IU/L) (Numérica)
++ **AST_BLOOD**: Contenido de AsAT en suero (IU/L) (Numérica)
++ **L_BLOOD**: Conteo de células blancas (billones por litro) (Numérica)
++ **ROE**: Velocidad de sedimentación eritrocítica (mm) (Numérica)
+
+Complicaciones y resultados del infarto de miocardio:
+
++ **JELUD_TAH**: Taquicardia ventricular (Binaria; 0: no, 1: sí)
++ **FIBR_JELUD**: Fibrilación ventricular (Binaria; 0: no, 1: sí)
++ **OTEK_LANC**: Edema pulmonar (Binaria; 0: no, 1: sí)
++ **RAZRIV**: Ruptura miocárdica (Binaria; 0: no, 1: sí)
++ **REC_IM**: Reinfarto miocárdico (Binaria; 0: no, 1: sí)
++ **LET_IS**: Resultado letal (causa) (Categórica)  (0: desconocido (vivo), 1: shock cardiogénico, 2: edema pulmonar, 3: ruptura miocárdica, 4: progresión de insuficiencia cardíaca congestiva, 5: tromboembolismo, 6: asistolia, 7: fibrilación ventricular)
+
+
+
+# División de los datos en entrenamiento y test
+
+Creamos dos subconjuntos (train y test) de forma estratificada con createDataPartition, usando LET_IS como variable estratificadora:
+
+```{r}
+table(IM_s$LET_IS)
+```
+Vemos que el hecho de que los datos no sean balanceados va a hacer que el modelo se incline por 0 con mucha proabbilidad. Vamos a intentar solucioniar esto mediante estratificación
+
+```{r}
+set.seed(123)
+y <- IM_s[,31] 
+X <- IM_s[,-31] 
+
+indexes <- createDataPartition(y, p = 2/3, list = FALSE)
+
+trainx <- X[indexes, ]
+trainy <- y[indexes]
+testx <- X[-indexes, ]
+testy <- y[-indexes]
+
+#Dimensiones
+
+dim(trainx)
+dim(testx)
+
+table(trainy)
+table(testy)
+
+prop.table(table(IM_s$LET_IS))
+prop.table(table(trainy))
+prop.table(table(testy))
+```
+
+
+
+Las proporciones parecen lo suficientemente equitativas en prueba y test con respecto a la variable original. 
+Vamos a proceder con la generación del modelo. 
+
+
+# Árboles de decisión (C5.0)
+
+Transformamos trainy a factor, entrenamos un modelo C5.0 simple y revisamos el resumen:
+
+
+```{r}
+trainy <-  as.factor(trainy)
+modeltree <- C50::C5.0(trainx, trainy,rules=TRUE )
+summary(modeltree)
+```
+
+Como era de esperar, con datos muy desbalanceados, el árbol tiende a clasificar todo en la clase mayoritaria. Para mejorar esta situación, empleamos SMOTE para sobre-representar clases minoritarias:
+
+```{r}
+set.seed(666)
+train_data <- data.frame(trainx, LET_IS = trainy)
+
+smote_result <- SMOTE(X = train_data[,-ncol(train_data)], target = train_data$LET_IS, K = 5, dup_size = 10)
+
+data_smote <- smote_result$data
+
+trainx_smote <- data_smote[,-ncol(data_smote)]
+trainy_smote <- data_smote$class
+trainy_smote <- as.factor(trainy_smote)
+print(table(trainy_smote))
+```
+
+Entrenamos el árbol con el nuevo dataset balanceado:
+
+
+```{r}
+modeltree_smote <- C5.0(trainx_smote, trainy_smote, rules = TRUE)
+summary(modeltree_smote)
+```
+
+
+Ajustando los parámetros de k y dup_size de SMOTE hemos conseguido generar reglas algo mas lógicas. En este caso el modelo utiliza 12 reglas para clasificar siendo RAZRIV, zab_leg_02, endocr_01, AST_BLOOD, AGE, K_BLOOD y L_BLOOD las mas utilizadass, con un error del 11.7%. A continuación exponemos las reglas generadas: 
+
+Regla 1:
+
+Predice: class 0
+Confianza: 0.924
+Interpretación: Si el paciente no tiene antecedentes de diabetes mellitus, el conteo de células blancas en sangre es menor o igual a 8.6 billones por litro y no hay ruptura miocárdica, entonces, es muy probable que el resultado sea "desconocido (vivo)" ( 0)
+
+Regla 2:
+
+Predice: class 0
+Confianza: 0.898
+Interpretación: Si el paciente tiene 72 años o menos, no tiene antecedentes de diabetes mellitus y no hay ruptura miocárdica, es muy probable que el resultado sea "desconocido (vivo)" (0)
+
+Regla 3:
+Predice:  0
+Confianza: 0.889
+Interpretación: Si el paciente no tiene antecedentes de diabetes mellitus, el contenido de potasio en suero es menor o igual a 5.9 mmol/L, el contenido de AsAT en suero es menor o igual a 0.442 IU/L  y no hay ruptura miocárdica , entonces, es muy probable que el resultado sea "desconocido (vivo)" (class 0).
+
+Regla 4:
+Predice:  0
+Confianza: 0.844
+Interpretación: Si el paciente tiene un valor de bronquitis crónica obstructiva menor o igual a 0.04270205 y no hay ruptura miocárdica, entonces, es muy probable que el resultado sea "desconocido (vivo)" (0).
+
+Regla 5:
+Predice:  1
+Confianza: 0.750
+Interpretación: Si el paciente tiene más de 72 años, tiene enfermedad coronaria reciente significativa, no tiene antecedentes de diabetes mellitus, el contenido de AsAT en suero es mayor a 0.442 IU/L , el conteo de células blancas en sangre es mayor a 8.6 billones por litro y no hay ruptura miocárdica , entonces, es probable que el resultado sea "shock cardiogénico" (1)
+
+Regla 6:
+Predice:  1
+Confianza: 0.750
+Interpretación: Si el paciente tiene antecedentes de diabetes mellitus, un valor de bronquitis crónica obstructiva mayor a 0.04270205, el contenido de AsAT en suero es menor o igual a 0.1474019 IU/L  y tiene edema pulmonar , entonces, es probable que el resultado sea "shock cardiogénico" (1)
+
+Regla 7:
+Predice:  1
+Confianza: 0.529
+Interpretación: Si el paciente tiene más de 72 años, tiene enfermedad coronaria reciente significativa, no tiene antecedentes de diabetes mellitus, el contenido de AsAT en suero es mayor a 0.442 IU/L y no hay ruptura miocárdica, entonces, es probable que el resultado sea "shock cardiogénico" (1)
+
+Regla 8:
+Predice:  3
+Confianza: 0.979
+Interpretación: Si el paciente tiene ruptura miocárdica, entonces, es muy probable que el resultado sea "ruptura miocárdica" (3)
+
+Regla 9:
+Predice:  5
+Confianza: 0.979
+Interpretación: Si el paciente tiene antecedentes de diabetes mellitus  y el valor de la diabetes mellitus está por debajo de 0.9910641, entonces, es muy probable que el resultado sea "tromboembolismo" (5)
+
+Regla 10:
+Predice:  5
+Confianza: 0.923
+Interpretación: Si el paciente tiene más de 72 años, la enfermedad coronaria reciente no es significativa, el contenido de AsAT en suero es mayor a 0.442 IU/L y la velocidad de sedimentación eritrocítica es menor o igual a 15.70796 mm, entonces, es muy probable que el resultado sea "tromboembolismo" (5)
+
+Regla 11:
+Predice:  5
+Confianza: 0.917
+Interpretación: Si el paciente tiene antecedentes de diabetes mellitus, bronquitis crónica obstructiva , el contenido de AsAT en suero es menor o igual a 0.1474019 IU/L y no tiene edema pulmonar, entonces, es muy probable que el resultado sea "tromboembolismo" (5)
+
+Regla 12:
+Predice:  5
+Confianza: 0.875
+Interpretación: Si el paciente tiene antecedentes de diabetes mellitus, el contenido de AsAT en suero es mayor a 0.1208269 IU/L y menor o igual a 0.1474019 IU/L , entonces, es muy probable que el resultado sea "tromboembolismo" (5)
+
+Las reglas muestran potenciales antecedentes que pueden influir en el desenlace final del paciente que ha sido ingresado. Los niveles de AsAT y la edad avanzada son factores recurrentes que influyen en las predicciones de tromboembolismo. La diabetes mellitus, tanto presente como ausente, junto con otros factores como el conteo de células blancas, niveles de AsAT y bronquitis crónica obstructiva, juegan roles cruciales en determinar resultados específicos como el shock cardiogénico (class 1) y tromboembolismo (class 5). 
+
+```{r}
+predicted_modeltree_smote <- predict(modeltree_smote, testx, type="class" )
+accuracy <- sum(predicted_modeltree_smote == testy) / length(testy)
+
+print(paste("Accuracy:", 100*accuracy ))
+```
+
+La precisión del modelo es de 86.92 %, un muy buen valor predictivo. 
+Calculamos la matriz de confusión:
+
+```{r}
+confusion_matrix <- CrossTable(testy, predicted_modeltree_smote,prop.chisq  = FALSE, prop.c = FALSE, prop.r =FALSE,dnn = c('Reality', 'Prediction'))
+```
+
+También con caret:
+
+
+```{r}
+levels <- sort(unique(c(predicted_modeltree_smote, testy)))
+predicted_modeltree_smote <- factor(predicted_modeltree_smote, levels = levels)
+testy <- factor(testy, levels = levels)
+
+confusionMatrixsmote_dt <- confusionMatrix(data = predicted_modeltree_smote, reference = testy, positive = "1")
+confusionMatrixsmote_dt
+```
+
+El modelo tiene un buen rendimiento en la detección de la clase mayoritaria (0: Desconocido Vivo) y la clase 3 (Ruptura Miocárdica), pero tiene dificultades significativas en la detección de otras clases, especialmente las que no se dispone de tanta información. Esto sugiere que el modelo puede estar sesgado hacia la clase mayoritaria y no es lo suficientemente sensible para las clases menos representadas, pese a haber hecho técnicas para tratar de balancear los datos. 
+
+```{r}
+testy_factor <- as.factor(testy)
+predicted_factor <- as.factor(predicted_modeltree_smote)
+
+probabilities <- predict(modeltree_smote, testx, type="prob")
+
+roc_data <- data.frame()
+
+for (i in levels(testy_factor)) {
+  roc_curve <- roc(testy_factor == i, probabilities[, i])
+  roc_df <- data.frame(
+    tpr = roc_curve$sensitivities,
+    fpr = 1 - roc_curve$specificities,
+    class = i
+  )
+  roc_data <- rbind(roc_data, roc_df)
+}
+
+ggplot(roc_data, aes(x = fpr, y = tpr, color = class)) +
+  geom_line() +
+  geom_abline(linetype = "dashed") +
+  labs(
+    title = "ROC Curves for Each Class (One-vs-Rest)",
+    x = "False Positive Rate",
+    y = "True Positive Rate"
+  ) +
+  theme_minimal()
+```
+Si observamos la cuva ROC, la clase 0 es la única que tiene un bueen rendimiento, las demás no. Probablemente debido a que los datos no estan balanceados
+
+# Árboles con Boosting
+
+
+Trataremos de mejorar el modelo usando boosting
+
+```{r}
+modeltree_smote_boost <- C50::C5.0(trainx_smote, trainy_smote, trials = 20)
+summary(modeltree_smote_boost)
+```
+Usando el modelo con boosting los errores oscilan entre 11.2% y 30.7%, el modelo combinado mejora el rendimiento global con un error del 11.6%. La mayoría de las clases siguen siendo representadas como 0, logico por el desbalanceo de los datos. La ruptura miocardica sigue siendo el mas empleado, junto con enfermedad coronaria reciente, fibrilacion ventricular, y celulas balncas sanguienas.Tras hacer pruebas con el número de trials se ha visto que al aumentar se pierde precisión. 
+
+```{r}
+predicted_modeltree_smote_boost <- predict(modeltree_smote_boost, testx, type="class" )
+accuracy_boost <- sum(predicted_modeltree_smote_boost == testy) / length(testy)
+
+print(paste("Accuracy boost:", 100*accuracy_boost ))
+print(paste("Accuracy :", 100*accuracy ))
+```
+La precisión con 20 trials se ve levemente disminuida frente al modelo anterior. Veamos mas metricas
+
+```{r}
+conf_matrix <- confusionMatrix(predicted_modeltree_smote, testy)
+print(conf_matrix)
+
+conf_matrix_boost <- confusionMatrix(predicted_modeltree_smote_boost, testy)
+print(conf_matrix_boost)
+```
+El rendimiento es similar en términos de precisión. En ambos modelos, la clase 0 (vivo) tiene una alta sensibilidad, pero al especificidad es baja por lo que hay muhcos falsos positivos. Para las clases minoritarias, los modelos muestran bajas sensibilidades, lo que indica que el modelo tiene dificultades para identificar correctamente los casos de estas clases. El uso de boosting no parece mejorar significativamente la sensibilidad o la especificidad de las clases minoritarias. Aunque se observan ligeras diferencias, la mejora no es suficiente para impactar de manera notable el rendimiento general del modelo.
+
+
+# Random Forest
+
+
+
+Por último, vamos a implementar un random forest, que suele ser mas robusto frente al overfitting y es capaz de manejar muy bien las variables minoritarias
+
+```{r}
+set.seed(123)
+rf_model_smote <-randomForest(trainx_smote, trainy_smote, ntree=100)
+print(rf_model_smote)
+```
+
+El modelo tiene un error del 12,14% y continua sin clasificar correctamente la clase 1, 2, 4,6 y 7. No cabe duda de que nos encontramos ante un problema con los datos que dificilmente se puede solventar aplicando diferentes modelos. Vamos a ver las métricas.
+
+```{r}
+predicted_rf_smote <- predict(rf_model_smote, testx)
+accuracy_rf_smote <- sum(predicted_rf_smote == testy) / length(testy)
+print(paste("Accuracy RF SMOTE:", 100 * accuracy_rf_smote))
+```
+
+```{r}
+conf_matrix_rf_smote <- confusionMatrix(predicted_rf_smote, testy)
+
+# Imprimir la matriz de confusión y otras métricas
+print(conf_matrix_rf_smote)
+```
+
+Pese a que los datos de precisión son muy buenos, hay que tener cuidado puesto que el rendimieinto es muy variable en función de las clases. 0 y 3 tienen una sensibilidad alta, pero las demás es nula, por lo que el mdoelo no es eficiente. 0 tambien tieiine una mala especificidad, por lo que tenemos falsos positivos. 
+Es decir el modelo está muy sesgaado hacia 0 y 3 en resumen. 
+
+```{r}
+prob_tree <- predict(modeltree_smote, testx, type = "prob")[, "1"]
+prob_tree_boost <- predict(modeltree_smote_boost, testx, type = "prob")[, "1"]
+probs_rf <- predict(rf_model_smote, testx, type = "prob")[, "1"]
+
+# Compute ROC curves and AUC for each model
+roc_tree <- roc(testy, prob_tree)
+roc_tree_boost <- roc(testy, prob_tree_boost)
+roc_rf <- roc(testy, probs_rf)
+
+# Plot ROC curves
+plot(roc_tree, col = "tan2", main = "Comparación de Curvas ROC", print.auc = TRUE)
+plot(roc_tree_boost, add = TRUE, col = "aquamarine3", print.auc = TRUE)
+plot(roc_rf, add = TRUE, col = "coral3", print.auc = TRUE)
+legend("bottomright", legend = c("Tree", "Tree Boost", "Random Forest"), col = c("tan2", "aquamarine3", "coral3"), lwd = 2)
+```
+Según la curva ROC el random forest es el mejor de los modelos para distinguir entre clases, pero ya hemos visto anteiormente que pese a que los resultados sean buenos en términos de números, la inerpretación nos dice que está claramente sesgado y no debemos confiar en los resultados que ofrece. El desbalanceo de los datos hace que el modelo no clasifique bien todas las  clases por igual y no sea lo suficientemente preciso, mas aun en un ambito como el médico que puede ser muy delicado en cuanto a las deicsiones que tomemos. 
+
+******
+# Conclusiones finales
+******
+
+
+Desbalance de Clases: El dataset tiene una clase mayoritaria (0: “desconocido/vivo”) muy dominante y clases minoritarias con muy pocos ejemplos (shock cardiogénico, tromboembolismo, etc.). Esto ocasiona que los modelos se centren en predecir la clase más frecuente.
+
+SMOTE: La sobre-muestreo artificial de clases minoritarias mejora la diversidad de instancias para entrenar, pero no soluciona por completo el sesgo: los modelos siguen fallando en ciertas clases con muy poca representatividad.
+
+Modelos:
+
+Árbol C5.0 genera reglas interpretables, pero tiende a ignorar las clases raras si no se equilibra el dataset.
+
+Boosting (C5.0) aporta mejoras parciales, sin resolver del todo la baja sensibilidad en las clases minoritarias.
+
+Random Forest logra una precisión global elevada, pero mantiene un sesgo considerable y comete errores importantes al identificar clases inusuales.
+
+Aplicabilidad Clínica: Dada la sensibilidad insuficiente para ciertas complicaciones críticas, estos modelos no serían recomendables en un entorno de soporte a la decisión médica sin un tratamiento más exhaustivo del desbalance (p.ej., recolección adicional de casos minoritarios, otro tipo de muestreo, o un rediseño de la estrategia de predicción).
+
+Perspectivas Futuras: Para mejorar la robustez de estos modelos, se recomienda:
+
+Aumentar el tamaño y la diversidad del dataset, especialmente de las clases menos habituales.
+
+Experimentar con técnicas de cost-sensitive learning (penalizando más los errores en clases minoritarias).
+
+Realizar validaciones cruzadas con métricas de interés clínico, por ejemplo, F2-score para enfatizar la detección de complicaciones graves.
+
+En resumen, aunque se han obtenido niveles de exactitud aceptables en la clase predominante, la baja sensibilidad en desenlaces poco frecuentes y de alto riesgo limita la utilidad de estos modelos en la práctica clínica real.
